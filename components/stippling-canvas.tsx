@@ -60,7 +60,7 @@ export default function StipplingCanvas() {
     friction: 0.12,
   })
 
-  // Refs for animation loop
+  // Refs for animation loop - stores all parameters that need to be accessed in the animation loop
   const paramsRef = useRef({
     threshold,
     attraction,
@@ -310,10 +310,10 @@ export default function StipplingCanvas() {
     const textureSize = particleCountBase
 
     const init = () => {
-      // Renderer
+      // Renderer - use pixel ratio of 1 to avoid doubled particles on retina displays
       renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false })
       renderer.setSize(container.clientWidth, container.clientHeight)
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      renderer.setPixelRatio(1)
       renderer.setClearColor(0x000000, 1)
 
       // Scene
@@ -614,8 +614,8 @@ export default function StipplingCanvas() {
         ;(particleMesh.material as THREE.ShaderMaterial).uniforms.screenAspect.value = screenAspect
       }
 
-      // Update radius
-      ;(particleMesh.material as THREE.ShaderMaterial).uniforms.uRadius.value = radius
+      // Update radius from ref
+      ;(particleMesh.material as THREE.ShaderMaterial).uniforms.uRadius.value = p.radius
 
       // Update video texture
       videoTexture.needsUpdate = true
@@ -648,7 +648,6 @@ export default function StipplingCanvas() {
     init()
     handleResize()
     animate()
-    console.log("[v0] Three.js scene initialized, video dimensions:", video.videoWidth, "x", video.videoHeight)
 
     return () => {
       window.removeEventListener("resize", handleResize)
@@ -882,16 +881,7 @@ export default function StipplingCanvas() {
 
         {controlMode === "sliders" ? (
           <>
-            {/* Particle controls */}
-            <Slider
-              label="Particle count"
-              value={particleCountBase}
-              onChange={setParticleCountBase}
-              min={64}
-              max={256}
-              step={1}
-            />
-
+            {/* Particle controls - Particle count is fixed at 128x128=16384 for performance stability */}
             <Slider label="Threshold" value={threshold} onChange={setThreshold} min={0} max={1} step={0.01} />
 
             <Slider label="Attraction" value={attraction} onChange={setAttraction} min={0} max={2} step={0.01} />
