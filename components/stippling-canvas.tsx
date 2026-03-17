@@ -285,7 +285,7 @@ export default function StipplingCanvas() {
 
   // Main Three.js / GPGPU effect
   useEffect(() => {
-    if (!containerRef.current || !canvasRef.current || !videoRef.current) return
+    if (!containerRef.current || !canvasRef.current || !videoRef.current || !isPlaying) return
 
     const container = containerRef.current
     const canvas = canvasRef.current
@@ -301,6 +301,8 @@ export default function StipplingCanvas() {
     let scene: THREE.Scene
     let camera: THREE.OrthographicCamera
 
+    // Use fixed particle count instead of from state
+    const particleCountBase = 128
     const particleCount = particleCountBase * particleCountBase
     const textureSize = particleCountBase
 
@@ -648,13 +650,14 @@ export default function StipplingCanvas() {
     init()
     handleResize()
     animate()
+    console.log("[v0] Three.js scene initialized, video dimensions:", video.videoWidth, "x", video.videoHeight)
 
     return () => {
       window.removeEventListener("resize", handleResize)
       cancelAnimationFrame(animationId)
       renderer?.dispose()
     }
-  }, [particleCountBase])
+  }, [isPlaying])
 
   // Hand tracking loop
   useEffect(() => {
@@ -839,7 +842,7 @@ export default function StipplingCanvas() {
   return (
     <div ref={containerRef} className="w-full h-screen bg-black overflow-hidden relative">
       {/* Hidden video element */}
-      <video ref={videoRef} className="hidden" playsInline muted loop crossOrigin="anonymous" />
+      <video ref={videoRef} className="hidden" playsInline muted crossOrigin="anonymous" />
 
       {/* WebGL canvas */}
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
