@@ -352,8 +352,8 @@ export default function StipplingCanvas() {
         velData[i] = 0
       }
 
-      // Shaders
-      // Note: texturePosition and textureVelocity are auto-injected by GPUComputationRenderer
+      // Shaders - GPUComputationRenderer auto-injects: texturePosition, textureVelocity, resolution
+      // DO NOT declare these uniforms manually or set resolution uniform
       const velocityShader = `
         uniform sampler2D videoTexture;
         uniform float uThreshold;
@@ -505,11 +505,11 @@ export default function StipplingCanvas() {
       velocityVariable.material.uniforms.uFriction = { value: friction }
       velocityVariable.material.uniforms.uInverted = { value: inverted ? 1.0 : 0.0 }
       velocityVariable.material.uniforms.uActive = { value: isSimulationActive ? 1.0 : 0.0 }
-      velocityVariable.material.uniforms.resolution = { value: new THREE.Vector2(textureSize, textureSize) }
+      // resolution is auto-injected by GPUComputationRenderer - don't override it
       velocityVariable.material.uniforms.videoAspect = { value: 16 / 9 }
       velocityVariable.material.uniforms.screenAspect = { value: container.clientWidth / container.clientHeight }
 
-      positionVariable.material.uniforms.resolution = { value: new THREE.Vector2(textureSize, textureSize) }
+      // resolution is auto-injected by GPUComputationRenderer - don't override it
 
       const error = gpuCompute.init()
       if (error !== null) {
