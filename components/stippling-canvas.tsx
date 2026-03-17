@@ -155,7 +155,7 @@ export default function StipplingCanvas() {
     }
   }, [controlMode])
 
-  // Track current values in a ref so snap detection can access them without re-running effect
+  // Track current values in a ref so snap detection can access them without re-running the effect
   const currentValuesRef = useRef({ threshold, attraction, repulsion, returnStrength, radius, friction })
   useEffect(() => {
     currentValuesRef.current = { threshold, attraction, repulsion, returnStrength, radius, friction }
@@ -353,9 +353,8 @@ export default function StipplingCanvas() {
       }
 
       // Shaders
+      // Note: texturePosition and textureVelocity are auto-injected by GPUComputationRenderer
       const velocityShader = `
-        uniform sampler2D texturePosition;
-        uniform sampler2D textureVelocity;
         uniform sampler2D videoTexture;
         uniform float uThreshold;
         uniform float uAttraction;
@@ -472,9 +471,8 @@ export default function StipplingCanvas() {
         }
       `
 
+      // Note: texturePosition and textureVelocity are auto-injected by GPUComputationRenderer
       const positionShader = `
-        uniform sampler2D texturePosition;
-        uniform sampler2D textureVelocity;
         uniform vec2 resolution;
 
         void main() {
