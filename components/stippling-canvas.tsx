@@ -363,12 +363,11 @@ export default function StipplingCanvas() {
         uniform float uFriction;
         uniform float uInverted;
         uniform float uActive;
-        uniform vec2 resolution;
         uniform float videoAspect;
         uniform float screenAspect;
 
         void main() {
-          vec2 uv = gl_FragCoord.xy / resolution.xy;
+          vec2 uv = gl_FragCoord.xy / resolution;
           vec4 posData = texture2D(texturePosition, uv);
           vec4 velData = texture2D(textureVelocity, uv);
           
@@ -471,12 +470,10 @@ export default function StipplingCanvas() {
         }
       `
 
-      // Note: texturePosition and textureVelocity are auto-injected by GPUComputationRenderer
+      // Note: texturePosition, textureVelocity, and resolution are auto-injected by GPUComputationRenderer
       const positionShader = `
-        uniform vec2 resolution;
-
         void main() {
-          vec2 uv = gl_FragCoord.xy / resolution.xy;
+          vec2 uv = gl_FragCoord.xy / resolution;
           vec4 posData = texture2D(texturePosition, uv);
           vec4 velData = texture2D(textureVelocity, uv);
           
