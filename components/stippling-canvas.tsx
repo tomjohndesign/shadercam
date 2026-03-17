@@ -86,22 +86,26 @@ export default function StipplingCanvas() {
     }
   }, [threshold, attraction, repulsion, returnStrength, radius, friction, inverted, isSimulationActive])
 
-  // Enumerate devices
+  // Enumerate devices - WITHOUT requesting media first
   useEffect(() => {
     const enumerateDevices = async () => {
       try {
-        // Request permissions first
-        await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        const devices = await navigator.mediaDevices.enumerateDevices()
-        const video = devices.filter((d) => d.kind === "videoinput")
-        const audio = devices.filter((d) => d.kind === "audioinput")
-        setVideoDevices(video)
-        setAudioDevices(audio)
-        if (video.length > 0 && !selectedVideoDeviceId) {
-          setSelectedVideoDeviceId(video[0].deviceId)
-        }
-        if (audio.length > 0 && !selectedAudioDeviceId) {
-          setSelectedAudioDeviceId(audio[0].deviceId)
+        // Skip initial request if we don't have permission yet
+        // The permission will be granted when user actually enables webcam
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices()
+          const video = devices.filter((d) => d.kind === "videoinput")
+          const audio = devices.filter((d) => d.kind === "audioinput")
+          setVideoDevices(video)
+          setAudioDevices(audio)
+          if (video.length > 0 && !selectedVideoDeviceId) {
+            setSelectedVideoDeviceId(video[0].deviceId)
+          }
+          if (audio.length > 0 && !selectedAudioDeviceId) {
+            setSelectedAudioDeviceId(audio[0].deviceId)
+          }
+        } catch {
+          // Silently fail on initial enumeration - devices will be populated once permissions are granted
         }
       } catch (err) {
         console.error("Error enumerating devices:", err)
@@ -151,9 +155,9 @@ export default function StipplingCanvas() {
     }
   }, [controlMode])
 
-  // Audio snap detection
+  // Audio snap detection - ONLY when hands mode is active AND video is playing
   useEffect(() => {
-    if (controlMode !== "hands") return
+    if (controlMode !== "hands" || !isPlaying) return
 
     let audioContext: AudioContext | null = null
     let analyser: AnalyserNode | null = null
@@ -229,7 +233,7 @@ export default function StipplingCanvas() {
       cancelAnimationFrame(rafId)
       audioContext?.close()
     }
-  }, [controlMode, selectedAudioDeviceId, threshold, attraction, repulsion, returnStrength, radius, friction])
+  }, [controlMode, selectedAudioDeviceId, threshold, attraction, repulsion, returnStrength, radius, friction, isPlaying])
 
   // Webcam initialization
   useEffect(() => {
