@@ -155,6 +155,12 @@ export default function StipplingCanvas() {
     }
   }, [controlMode])
 
+  // Track current values in a ref so snap detection can access them without re-running effect
+  const currentValuesRef = useRef({ threshold, attraction, repulsion, returnStrength, radius, friction })
+  useEffect(() => {
+    currentValuesRef.current = { threshold, attraction, repulsion, returnStrength, radius, friction }
+  }, [threshold, attraction, repulsion, returnStrength, radius, friction])
+
   // Audio snap detection - ONLY when hands mode is active AND video is playing
   useEffect(() => {
     if (controlMode !== "hands" || !isPlaying) return
@@ -191,15 +197,8 @@ export default function StipplingCanvas() {
             // Toggle lock state
             setIsLocked((prev) => {
               if (!prev) {
-                // Lock to preset values
-                prevValuesRef.current = {
-                  threshold,
-                  attraction,
-                  repulsion,
-                  returnStrength,
-                  radius,
-                  friction,
-                }
+                // Lock to preset values - read current values from ref
+                prevValuesRef.current = { ...currentValuesRef.current }
                 setThreshold(0.32)
                 setAttraction(0.2)
                 setRepulsion(0.55)
@@ -233,7 +232,7 @@ export default function StipplingCanvas() {
       cancelAnimationFrame(rafId)
       audioContext?.close()
     }
-  }, [controlMode, selectedAudioDeviceId, threshold, attraction, repulsion, returnStrength, radius, friction, isPlaying])
+  }, [controlMode, selectedAudioDeviceId, isPlaying])
 
   // Webcam initialization
   useEffect(() => {
