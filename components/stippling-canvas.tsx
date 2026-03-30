@@ -38,14 +38,14 @@ export default function StipplingCanvas() {
   // Control mode
   const [controlMode, setControlMode] = useState<"sliders" | "hands">("sliders")
 
-  // Parameters with DialKit-style defaults
+  // Parameters - default property set
   const [particleCountBase, setParticleCountBase] = useState(128)
-  const [threshold, setThreshold] = useState(1.0)
-  const [attraction, setAttraction] = useState(1.0)
-  const [repulsion, setRepulsion] = useState(0.0)
-  const [returnStrength, setReturnStrength] = useState(0.2)
-  const [radius, setRadius] = useState(5.5)
-  const [friction, setFriction] = useState(0.12)
+  const [threshold, setThreshold] = useState(0.64)
+  const [attraction, setAttraction] = useState(1.58)
+  const [repulsion, setRepulsion] = useState(0.75)
+  const [returnStrength, setReturnStrength] = useState(0.55)
+  const [radius, setRadius] = useState(1)
+  const [friction, setFriction] = useState(0.89)
   const [inverted, setInverted] = useState(false)
   const [isSimulationActive, setIsSimulationActive] = useState(true)
   const [isLocked, setIsLocked] = useState(false)
@@ -814,12 +814,12 @@ export default function StipplingCanvas() {
   }
 
   const handleReset = () => {
-    setThreshold(1.0)
-    setAttraction(1.0)
-    setRepulsion(0.0)
-    setReturnStrength(0.2)
-    setRadius(5.5)
-    setFriction(0.12)
+    setThreshold(0.64)
+    setAttraction(1.58)
+    setRepulsion(0.75)
+    setReturnStrength(0.55)
+    setRadius(1)
+    setFriction(0.89)
   }
 
   const handleCopy = () => {
