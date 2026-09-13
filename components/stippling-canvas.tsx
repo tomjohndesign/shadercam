@@ -17,7 +17,16 @@ type HandLandmarkerType = {
   close: () => void
 }
 
-export default function StipplingCanvas() {
+interface StipplingCanvasProps {
+  /** Dot-count multiplier, from 0.25 to 16. Defaults to 1 (16,384 dots). */
+  density?: number
+}
+
+function clampDensity(density: number) {
+  return Number.isFinite(density) ? Math.max(0.25, Math.min(16, density)) : 1
+}
+
+export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const handOverlayRef = useRef<HTMLCanvasElement>(null)
@@ -39,7 +48,13 @@ export default function StipplingCanvas() {
   const [controlMode, setControlMode] = useState<"sliders" | "hands">("sliders")
 
   // Parameters - default property set
-  const [particleCountBase, setParticleCountBase] = useState(128)
+  const [densityValue, setDensityValue] = useState(() => clampDensity(density))
+  const particleCountBase = Math.round(128 * Math.sqrt(densityValue))
+  const particleCount = particleCountBase * particleCountBase
+
+  useEffect(() => {
+    setDensityValue(clampDensity(density))
+  }, [density])
   const [threshold, setThreshold] = useState(0.64)
   const [attraction, setAttraction] = useState(1.58)
   const [repulsion, setRepulsion] = useState(0.75)
@@ -314,8 +329,7 @@ export default function StipplingCanvas() {
     let scene: THREE.Scene
     let camera: THREE.OrthographicCamera
 
-    // Use fixed particle count instead of from state
-    const particleCountBase = 128
+    // The simulation uses one texture texel per dot in a square grid.
     const particleCount = particleCountBase * particleCountBase
     const textureSize = particleCountBase
 
@@ -522,7 +536,7 @@ export default function StipplingCanvas() {
       if (error !== null) {
         console.error("GPGPU error:", error)
         setError("Failed to initialize GPU computation")
-        return
+        return false
       }
 
       // Particle geometry
@@ -536,8 +550,8 @@ export default function StipplingCanvas() {
         positions[i * 3] = 0
         positions[i * 3 + 1] = 0
         positions[i * 3 + 2] = 0
-        uvs[i * 2] = ix / textureSize
-        uvs[i * 2 + 1] = iy / textureSize
+        uvs[i * 2] = (ix + 0.5) / textureSize
+        uvs[i * 2 + 1] = (iy + 0.5) / textureSize
       }
 
       geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3))
@@ -594,6 +608,7 @@ export default function StipplingCanvas() {
 
       particleMesh = new THREE.Points(geometry, material)
       scene.add(particleMesh)
+      return true
     }
 
     const animate = () => {
@@ -652,16 +667,25 @@ export default function StipplingCanvas() {
     window.addEventListener("resize", handleResize)
 
     // Initialize
-    init()
-    handleResize()
-    animate()
+    if (init()) {
+      handleResize()
+      animate()
+    }
 
     return () => {
       window.removeEventListener("resize", handleResize)
       cancelAnimationFrame(animationId)
+      gpuCompute?.dispose()
+      positionVariable?.material.dispose()
+      velocityVariable?.material.dispose()
+      particleMesh?.geometry.dispose()
+      if (particleMesh) {
+        ;(particleMesh.material as THREE.ShaderMaterial).dispose()
+      }
+      videoTexture?.dispose()
       renderer?.dispose()
     }
-  }, [isPlaying])
+  }, [isPlaying, particleCountBase])
 
   // Hand tracking loop
   useEffect(() => {
@@ -821,6 +845,7 @@ export default function StipplingCanvas() {
   }
 
   const handleReset = () => {
+    setDensityValue(clampDensity(density))
     setThreshold(0.64)
     setAttraction(1.58)
     setRepulsion(0.75)
@@ -831,7 +856,8 @@ export default function StipplingCanvas() {
 
   const handleCopy = () => {
     const config = {
-      particleCount: particleCountBase,
+      density: densityValue,
+      particleCount,
       threshold,
       attraction,
       repulsion,
@@ -886,9 +912,14 @@ export default function StipplingCanvas() {
           />
         )}
 
+        <Slider label="Density (×)" value={densityValue} onChange={setDensityValue} min={0.25} max={16} step={0.25} />
+        <div className="px-[10px] text-[11px]" style={{ color: "var(--dial-text-tertiary)" }}>
+          {particleCount.toLocaleString("en-US")} dots
+        </div>
+
         {controlMode === "sliders" ? (
           <>
-            {/* Particle controls - Particle count is fixed at 128x128=16384 for performance stability */}
+            {/* Particle controls */}
             <Slider label="Threshold" value={threshold} onChange={setThreshold} min={0} max={1} step={0.01} />
 
             <Slider label="Attraction" value={attraction} onChange={setAttraction} min={0} max={2} step={0.01} />
