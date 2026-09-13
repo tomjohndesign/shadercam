@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['@mediapipe/tasks-vision'],
-  },
+  serverExternalPackages: ['@mediapipe/tasks-vision'],
 }
 
 export default nextConfig
