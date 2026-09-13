@@ -156,7 +156,7 @@ export default function StipplingCanvas() {
 
     let audioContext: AudioContext | null = null
     let analyser: AnalyserNode | null = null
-    let dataArray: Uint8Array | null = null
+    let dataArray: Uint8Array<ArrayBuffer> | null = null
     let rafId: number
     let lastSnapTime = 0
 
@@ -307,8 +307,8 @@ export default function StipplingCanvas() {
     let animationId: number
     let renderer: THREE.WebGLRenderer
     let gpuCompute: GPUComputationRenderer
-    let positionVariable: { material: THREE.ShaderMaterial }
-    let velocityVariable: { material: THREE.ShaderMaterial }
+    let positionVariable: ReturnType<GPUComputationRenderer["addVariable"]>
+    let velocityVariable: ReturnType<GPUComputationRenderer["addVariable"]>
     let particleMesh: THREE.Points
     let videoTexture: THREE.VideoTexture
     let scene: THREE.Scene
@@ -343,7 +343,8 @@ export default function StipplingCanvas() {
 
       // Position texture (xy = position, zw = home position)
       const positionTexture = gpuCompute.createTexture()
-      const posData = positionTexture.image.data as Float32Array
+      // createTexture() allocates Float32Array data, which the Three.js image types omit.
+      const posData = positionTexture.image.data as unknown as Float32Array
       for (let i = 0; i < particleCount; i++) {
         const ix = i % textureSize
         const iy = Math.floor(i / textureSize)
@@ -357,7 +358,7 @@ export default function StipplingCanvas() {
 
       // Velocity texture
       const velocityTexture = gpuCompute.createTexture()
-      const velData = velocityTexture.image.data as Float32Array
+      const velData = velocityTexture.image.data as unknown as Float32Array
       for (let i = 0; i < particleCount * 4; i++) {
         velData[i] = 0
       }
@@ -496,12 +497,8 @@ export default function StipplingCanvas() {
         }
       `
 
-      velocityVariable = gpuCompute.addVariable("textureVelocity", velocityShader, velocityTexture) as {
-        material: THREE.ShaderMaterial
-      }
-      positionVariable = gpuCompute.addVariable("texturePosition", positionShader, positionTexture) as {
-        material: THREE.ShaderMaterial
-      }
+      velocityVariable = gpuCompute.addVariable("textureVelocity", velocityShader, velocityTexture)
+      positionVariable = gpuCompute.addVariable("texturePosition", positionShader, positionTexture)
 
       gpuCompute.setVariableDependencies(velocityVariable, [positionVariable, velocityVariable])
       gpuCompute.setVariableDependencies(positionVariable, [positionVariable, velocityVariable])
