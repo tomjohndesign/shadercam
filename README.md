@@ -28,3 +28,15 @@ Continue building your app on:
 2. Deploy your chats from the v0 interface
 3. Changes are automatically pushed to this repository
 4. Vercel deploys the latest version from this repository
+
+## Dot density
+
+Use the **Density (×)** control to adjust the number of dots from 0.25× to 16×. The default is 1× (16,384 dots); 4× gives 65,536 dots and 16× gives 262,144 dots. Higher density uses more GPU resources. Changing density restarts the particle simulation.
+
+You can also set the initial density through the component prop:
+
+```tsx
+<StipplingCanvas density={4} />
+```
+
+Changes to the prop update the density, and **Reset to Defaults** restores that prop value. Counts are rounded to a square grid. Copied settings include both the density multiplier and the actual dot count.
