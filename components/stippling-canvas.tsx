@@ -86,33 +86,22 @@ export default function StipplingCanvas() {
     }
   }, [threshold, attraction, repulsion, returnStrength, radius, friction, inverted, isSimulationActive])
 
-  // Enumerate devices - WITHOUT requesting media first
-  useEffect(() => {
-    const enumerateDevices = async () => {
-      try {
-        // Skip initial request if we don't have permission yet
-        // The permission will be granted when user actually enables webcam
-        try {
-          const devices = await navigator.mediaDevices.enumerateDevices()
-          const video = devices.filter((d) => d.kind === "videoinput")
-          const audio = devices.filter((d) => d.kind === "audioinput")
-          setVideoDevices(video)
-          setAudioDevices(audio)
-          if (video.length > 0 && !selectedVideoDeviceId) {
-            setSelectedVideoDeviceId(video[0].deviceId)
-          }
-          if (audio.length > 0 && !selectedAudioDeviceId) {
-            setSelectedAudioDeviceId(audio[0].deviceId)
-          }
-        } catch {
-          // Silently fail on initial enumeration - devices will be populated once permissions are granted
-        }
-      } catch (err) {
-        console.error("Error enumerating devices:", err)
-      }
+  // Enumerate devices. Until permission is granted browsers hide the real ids, returning
+  // either an empty list or placeholder entries with a blank deviceId, so anything blank is
+  // dropped here and the list is refreshed again once the webcam stream is live.
+  const refreshDevices = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      setVideoDevices(devices.filter((d) => d.kind === "videoinput" && d.deviceId))
+      setAudioDevices(devices.filter((d) => d.kind === "audioinput" && d.deviceId))
+    } catch (err) {
+      console.error("Error enumerating devices:", err)
     }
-    enumerateDevices()
   }, [])
+
+  useEffect(() => {
+    refreshDevices()
+  }, [refreshDevices])
 
   // Initialize HandLandmarker when hands mode is selected
   useEffect(() => {
@@ -236,22 +225,34 @@ export default function StipplingCanvas() {
 
   // Webcam initialization
   useEffect(() => {
-    if (!isWebcamActive || !selectedVideoDeviceId) return
+    if (!isWebcamActive) return
 
     let cancelled = false
     const startWebcam = async () => {
       try {
         if (videoRef.current?.srcObject) {
           const existingStream = videoRef.current.srcObject as MediaStream
+          const activeTrack = existingStream.getVideoTracks()[0]
+          // Already streaming the camera being asked for - leave it alone rather than
+          // tearing down and re-acquiring (which flickers the feed)
+          if (activeTrack?.readyState === "live" && activeTrack.getSettings().deviceId === selectedVideoDeviceId) {
+            return
+          }
           existingStream.getTracks().forEach((track) => track.stop())
           videoRef.current.srcObject = null
         }
 
+        // On first load there is no deviceId yet - permission has not been granted, so the
+        // ids are still hidden. A generic request is what raises the browser prompt; an
+        // exact deviceId is only usable once that prompt has been answered.
         const constraints: MediaStreamConstraints = {
-          video: { deviceId: { exact: selectedVideoDeviceId } },
+          video: selectedVideoDeviceId ? { deviceId: { exact: selectedVideoDeviceId } } : true,
         }
         const stream = await navigator.mediaDevices.getUserMedia(constraints)
-        if (cancelled || !videoRef.current) return
+        if (cancelled || !videoRef.current) {
+          stream.getTracks().forEach((track) => track.stop())
+          return
+        }
 
         videoRef.current.srcObject = stream
         videoRef.current.src = ""
@@ -271,6 +272,15 @@ export default function StipplingCanvas() {
             console.error("Error playing video:", playErr)
           }
         }
+
+        // Permission is granted now, so the real ids and labels are readable - refresh the
+        // picker and pin the selection to whichever camera the browser actually handed us
+        if (cancelled) return
+        await refreshDevices()
+        const activeDeviceId = stream.getVideoTracks()[0]?.getSettings().deviceId
+        if (!cancelled && activeDeviceId && !selectedVideoDeviceId) {
+          setSelectedVideoDeviceId(activeDeviceId)
+        }
       } catch (err) {
         if (!cancelled) {
           console.error("Error accessing webcam:", err)
@@ -284,7 +294,7 @@ export default function StipplingCanvas() {
     return () => {
       cancelled = true
     }
-  }, [selectedVideoDeviceId, isWebcamActive])
+  }, [selectedVideoDeviceId, isWebcamActive, refreshDevices])
 
   // Main Three.js / GPGPU effect
   useEffect(() => {
