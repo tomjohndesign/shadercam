@@ -1,8 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
-import * as THREE from "three"
-import { GPUComputationRenderer } from "three-stdlib"
+import { createStippleEffect } from "@/lib/stipple"
 import { FloatingPanel, Slider, Toggle, SegmentedControl, SelectControl, Button, Folder } from "./floating-panel"
 
 // Types for MediaPipe
@@ -311,381 +310,40 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
     }
   }, [selectedVideoDeviceId, isWebcamActive, refreshDevices])
 
-  // Main Three.js / GPGPU effect
+  // The app and downloadable module share the same renderer and shader code.
+  const effectRef = useRef<ReturnType<typeof createStippleEffect> | null>(null)
   useEffect(() => {
-    if (!containerRef.current || !canvasRef.current || !videoRef.current || !isPlaying) return
-
-    const container = containerRef.current
-    const canvas = canvasRef.current
-    const video = videoRef.current
-
-    let animationId: number
-    let renderer: THREE.WebGLRenderer
-    let gpuCompute: GPUComputationRenderer
-    let positionVariable: ReturnType<GPUComputationRenderer["addVariable"]>
-    let velocityVariable: ReturnType<GPUComputationRenderer["addVariable"]>
-    let particleMesh: THREE.Points
-    let videoTexture: THREE.VideoTexture
-    let scene: THREE.Scene
-    let camera: THREE.OrthographicCamera
-
-    // The simulation uses one texture texel per dot in a square grid.
-    const particleCount = particleCountBase * particleCountBase
-    const textureSize = particleCountBase
-
-    const init = () => {
-      // Renderer - use pixel ratio of 1 to avoid doubled particles on retina displays
-      renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false })
-      renderer.setSize(container.clientWidth, container.clientHeight)
-      renderer.setPixelRatio(1)
-      renderer.setClearColor(0x000000, 1)
-
-      // Scene
-      scene = new THREE.Scene()
-
-      // Camera
-      camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10)
-      camera.position.z = 1
-
-      // Video texture
-      videoTexture = new THREE.VideoTexture(video)
-      videoTexture.minFilter = THREE.LinearFilter
-      videoTexture.magFilter = THREE.LinearFilter
-
-      // GPGPU
-      gpuCompute = new GPUComputationRenderer(textureSize, textureSize, renderer)
-
-      // Position texture (xy = position, zw = home position)
-      const positionTexture = gpuCompute.createTexture()
-      // createTexture() allocates Float32Array data, which the Three.js image types omit.
-      const posData = positionTexture.image.data as unknown as Float32Array
-      for (let i = 0; i < particleCount; i++) {
-        const ix = i % textureSize
-        const iy = Math.floor(i / textureSize)
-        const x = (ix / textureSize) * 2 - 1
-        const y = (iy / textureSize) * 2 - 1
-        posData[i * 4 + 0] = x
-        posData[i * 4 + 1] = y
-        posData[i * 4 + 2] = x // home x
-        posData[i * 4 + 3] = y // home y
-      }
-
-      // Velocity texture
-      const velocityTexture = gpuCompute.createTexture()
-      const velData = velocityTexture.image.data as unknown as Float32Array
-      for (let i = 0; i < particleCount * 4; i++) {
-        velData[i] = 0
-      }
-
-      // Shaders - GPUComputationRenderer auto-injects: texturePosition, textureVelocity, resolution
-      // DO NOT declare these uniforms manually or set resolution uniform
-      const velocityShader = `
-        uniform sampler2D videoTexture;
-        uniform float uThreshold;
-        uniform float uAttraction;
-        uniform float uRepulsion;
-        uniform float uReturnStrength;
-        uniform float uFriction;
-        uniform float uInverted;
-        uniform float uActive;
-        uniform float videoAspect;
-        uniform float screenAspect;
-
-        void main() {
-          vec2 uv = gl_FragCoord.xy / resolution;
-          vec4 posData = texture2D(texturePosition, uv);
-          vec4 velData = texture2D(textureVelocity, uv);
-          
-          vec2 pos = posData.xy;
-          vec2 home = posData.zw;
-          vec2 vel = velData.xy;
-
-          if (uActive < 0.5) {
-            // Simulation paused - strong return to home
-            vec2 toHome = home - pos;
-            vel += toHome * 0.5;
-            vel *= 0.8;
-          } else {
-            // Sample video with aspect ratio correction (cover mode)
-            vec2 videoUV = pos * 0.5 + 0.5;
-            videoUV.x = 1.0 - videoUV.x; // Mirror
-            
-            // Apply cover scaling
-            float coverScale = max(screenAspect / videoAspect, 1.0);
-            if (screenAspect < videoAspect) {
-              coverScale = max(videoAspect / screenAspect, 1.0);
-            }
-            videoUV = (videoUV - 0.5) / coverScale + 0.5;
-            
-            vec4 videoColor = texture2D(videoTexture, videoUV);
-            float brightness = dot(videoColor.rgb, vec3(0.299, 0.587, 0.114));
-            
-            // Invert if needed
-            if (uInverted > 0.5) {
-              brightness = 1.0 - brightness;
-            }
-            
-            // Attraction to dark areas (below threshold)
-            float attractionFactor = smoothstep(uThreshold, uThreshold - 0.3, brightness);
-            
-            // Sample neighbors for local density
-            float repulsionForce = 0.0;
-            vec2 repulsionDir = vec2(0.0);
-            float sampleRadius = 2.0 / resolution.x;
-            
-            for (int i = 0; i < 8; i++) {
-              float angle = float(i) * 0.785398;
-              vec2 offset = vec2(cos(angle), sin(angle)) * sampleRadius;
-              vec4 neighborPos = texture2D(texturePosition, uv + offset);
-              vec2 diff = pos - neighborPos.xy;
-              float dist = length(diff);
-              if (dist > 0.001 && dist < 0.1) {
-                repulsionDir += normalize(diff) / (dist + 0.01);
-                repulsionForce += 1.0;
-              }
-            }
-            
-            if (repulsionForce > 0.0) {
-              repulsionDir /= repulsionForce;
-            }
-            
-            // Apply forces
-            vel += repulsionDir * uRepulsion * 0.001;
-            
-            // Attraction pulls toward darker areas (move toward gradient)
-            vec2 gradientDir = vec2(0.0);
-            float eps = 0.01;
-            float bRight = dot(texture2D(videoTexture, videoUV + vec2(eps, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
-            float bLeft = dot(texture2D(videoTexture, videoUV - vec2(eps, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
-            float bUp = dot(texture2D(videoTexture, videoUV + vec2(0.0, eps)).rgb, vec3(0.299, 0.587, 0.114));
-            float bDown = dot(texture2D(videoTexture, videoUV - vec2(0.0, eps)).rgb, vec3(0.299, 0.587, 0.114));
-            
-            if (uInverted > 0.5) {
-              bRight = 1.0 - bRight;
-              bLeft = 1.0 - bLeft;
-              bUp = 1.0 - bUp;
-              bDown = 1.0 - bDown;
-            }
-            
-            gradientDir.x = bLeft - bRight;
-            gradientDir.y = bDown - bUp;
-            
-            vel += gradientDir * uAttraction * attractionFactor * 0.08;
-            
-            // Return to home
-            vec2 toHome = home - pos;
-            vel += toHome * uReturnStrength;
-            
-            // Friction
-            vel *= (1.0 - uFriction);
-            
-            // Sleep threshold to reduce jitter
-            if (length(vel) < 0.0001) {
-              vel *= 0.5;
-            }
-            
-            // Clamp velocity
-            float maxSpeed = 0.02;
-            if (length(vel) > maxSpeed) {
-              vel = normalize(vel) * maxSpeed;
-            }
-          }
-
-          gl_FragColor = vec4(vel, 0.0, 1.0);
-        }
-      `
-
-      // Note: texturePosition, textureVelocity, and resolution are auto-injected by GPUComputationRenderer
-      const positionShader = `
-        void main() {
-          vec2 uv = gl_FragCoord.xy / resolution;
-          vec4 posData = texture2D(texturePosition, uv);
-          vec4 velData = texture2D(textureVelocity, uv);
-          
-          vec2 pos = posData.xy + velData.xy;
-          
-          // Clamp to bounds
-          pos = clamp(pos, vec2(-1.0), vec2(1.0));
-
-          gl_FragColor = vec4(pos, posData.zw);
-        }
-      `
-
-      velocityVariable = gpuCompute.addVariable("textureVelocity", velocityShader, velocityTexture)
-      positionVariable = gpuCompute.addVariable("texturePosition", positionShader, positionTexture)
-
-      gpuCompute.setVariableDependencies(velocityVariable, [positionVariable, velocityVariable])
-      gpuCompute.setVariableDependencies(positionVariable, [positionVariable, velocityVariable])
-
-      // Uniforms
-      velocityVariable.material.uniforms.videoTexture = { value: videoTexture }
-      velocityVariable.material.uniforms.uThreshold = { value: threshold }
-      velocityVariable.material.uniforms.uAttraction = { value: attraction }
-      velocityVariable.material.uniforms.uRepulsion = { value: repulsion }
-      velocityVariable.material.uniforms.uReturnStrength = { value: returnStrength }
-      velocityVariable.material.uniforms.uFriction = { value: friction }
-      velocityVariable.material.uniforms.uInverted = { value: inverted ? 1.0 : 0.0 }
-      velocityVariable.material.uniforms.uActive = { value: isSimulationActive ? 1.0 : 0.0 }
-      // resolution is auto-injected by GPUComputationRenderer - don't override it
-      velocityVariable.material.uniforms.videoAspect = { value: 16 / 9 }
-      velocityVariable.material.uniforms.screenAspect = { value: container.clientWidth / container.clientHeight }
-
-      // resolution is auto-injected by GPUComputationRenderer - don't override it
-
-      const error = gpuCompute.init()
-      if (error !== null) {
-        console.error("GPGPU error:", error)
-        setError("Failed to initialize GPU computation")
-        return false
-      }
-
-      // Particle geometry
-      const geometry = new THREE.BufferGeometry()
-      const positions = new Float32Array(particleCount * 3)
-      const uvs = new Float32Array(particleCount * 2)
-
-      for (let i = 0; i < particleCount; i++) {
-        const ix = i % textureSize
-        const iy = Math.floor(i / textureSize)
-        positions[i * 3] = 0
-        positions[i * 3 + 1] = 0
-        positions[i * 3 + 2] = 0
-        uvs[i * 2] = (ix + 0.5) / textureSize
-        uvs[i * 2 + 1] = (iy + 0.5) / textureSize
-      }
-
-      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3))
-      geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2))
-
-      // Particle material (squares)
-      const material = new THREE.ShaderMaterial({
-        uniforms: {
-          texturePosition: { value: null },
-          videoTexture: { value: videoTexture },
-          uRadius: { value: radius },
-          videoAspect: { value: 16 / 9 },
-          screenAspect: { value: container.clientWidth / container.clientHeight },
-        },
-        vertexShader: `
-          uniform sampler2D texturePosition;
-          uniform sampler2D videoTexture;
-          uniform float uRadius;
-          uniform float videoAspect;
-          uniform float screenAspect;
-          varying float vBrightness;
-
-          void main() {
-            vec4 posData = texture2D(texturePosition, uv);
-            vec3 pos = vec3(posData.xy, 0.0);
-            
-            // Sample video for size variation
-            vec2 videoUV = pos.xy * 0.5 + 0.5;
-            videoUV.x = 1.0 - videoUV.x;
-            
-            float coverScale = max(screenAspect / videoAspect, 1.0);
-            if (screenAspect < videoAspect) {
-              coverScale = max(videoAspect / screenAspect, 1.0);
-            }
-            videoUV = (videoUV - 0.5) / coverScale + 0.5;
-            
-            vec4 videoColor = texture2D(videoTexture, videoUV);
-            vBrightness = dot(videoColor.rgb, vec3(0.299, 0.587, 0.114));
-            
-            // Particles in dark areas are larger
-            float sizeMult = mix(2.0, 0.5, vBrightness);
-            
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
-            gl_PointSize = uRadius * sizeMult;
-          }
-        `,
-        fragmentShader: `
-          void main() {
-            // Square particles
-            gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
-          }
-        `,
-      })
-
-      particleMesh = new THREE.Points(geometry, material)
-      scene.add(particleMesh)
-      return true
-    }
-
-    const animate = () => {
-      animationId = requestAnimationFrame(animate)
-
-      if (!gpuCompute || !renderer || !scene || !camera) return
-
-      // Update uniforms from refs
+    if (!canvasRef.current || !videoRef.current || !isPlaying) return
+    let observer: ResizeObserver | undefined
+    try {
       const p = paramsRef.current
-      velocityVariable.material.uniforms.uThreshold.value = p.threshold
-      velocityVariable.material.uniforms.uAttraction.value = p.attraction
-      velocityVariable.material.uniforms.uRepulsion.value = p.repulsion
-      velocityVariable.material.uniforms.uReturnStrength.value = p.returnStrength
-      velocityVariable.material.uniforms.uFriction.value = p.friction
-      velocityVariable.material.uniforms.uInverted.value = p.inverted ? 1.0 : 0.0
-      velocityVariable.material.uniforms.uActive.value = p.isSimulationActive ? 1.0 : 0.0
-
-      // Update video aspect
-      if (video.videoWidth && video.videoHeight) {
-        const videoAspect = video.videoWidth / video.videoHeight
-        const screenAspect = container.clientWidth / container.clientHeight
-        velocityVariable.material.uniforms.videoAspect.value = videoAspect
-        velocityVariable.material.uniforms.screenAspect.value = screenAspect
-        ;(particleMesh.material as THREE.ShaderMaterial).uniforms.videoAspect.value = videoAspect
-        ;(particleMesh.material as THREE.ShaderMaterial).uniforms.screenAspect.value = screenAspect
+      effectRef.current = createStippleEffect({
+        canvas: canvasRef.current, source: videoRef.current, density: densityValue,
+        ...p, active: p.isSimulationActive, mirror: true,
+      })
+      const resizeOverlay = () => {
+        if (handOverlayRef.current && containerRef.current) {
+          handOverlayRef.current.width = containerRef.current.clientWidth
+          handOverlayRef.current.height = containerRef.current.clientHeight
+        }
       }
-
-      // Update radius from ref
-      ;(particleMesh.material as THREE.ShaderMaterial).uniforms.uRadius.value = p.radius
-
-      // Update video texture
-      videoTexture.needsUpdate = true
-
-      // Compute
-      gpuCompute.compute()
-
-      // Update particle positions
-      ;(particleMesh.material as THREE.ShaderMaterial).uniforms.texturePosition.value =
-        gpuCompute.getCurrentRenderTarget(positionVariable).texture
-
-      renderer.render(scene, camera)
+      observer = new ResizeObserver(resizeOverlay)
+      observer.observe(canvasRef.current)
+      resizeOverlay()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not initialize the stipple effect")
     }
-
-    // Handle resize
-    const handleResize = () => {
-      if (!renderer || !container) return
-      renderer.setSize(container.clientWidth, container.clientHeight)
-
-      // Update hand overlay size
-      if (handOverlayRef.current) {
-        handOverlayRef.current.width = container.clientWidth
-        handOverlayRef.current.height = container.clientHeight
-      }
-    }
-
-    window.addEventListener("resize", handleResize)
-
-    // Initialize
-    if (init()) {
-      handleResize()
-      animate()
-    }
-
     return () => {
-      window.removeEventListener("resize", handleResize)
-      cancelAnimationFrame(animationId)
-      gpuCompute?.dispose()
-      positionVariable?.material.dispose()
-      velocityVariable?.material.dispose()
-      particleMesh?.geometry.dispose()
-      if (particleMesh) {
-        ;(particleMesh.material as THREE.ShaderMaterial).dispose()
-      }
-      videoTexture?.dispose()
-      renderer?.dispose()
+      observer?.disconnect()
+      effectRef.current?.dispose()
+      effectRef.current = null
     }
   }, [isPlaying, particleCountBase])
+
+  useEffect(() => {
+    effectRef.current?.update({ threshold, attraction, repulsion, returnStrength, radius, friction,
+      inverted, active: isSimulationActive })
+  }, [threshold, attraction, repulsion, returnStrength, radius, friction, inverted, isSimulationActive])
 
   // Hand tracking loop
   useEffect(() => {
@@ -886,6 +544,10 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
           {error}
         </div>
       )}
+
+      <a href="/stipple/demo.html" className="absolute bottom-6 left-6 rounded-full border border-white/20 bg-black/70 px-5 py-3 text-sm text-white hover:bg-white/10">
+        Use this effect on your site ↗
+      </a>
 
       {/* DialKit-style floating panel */}
       <FloatingPanel title="Controls" position="top-right" onCopy={handleCopy}>

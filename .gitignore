@@ -3,3 +3,6 @@ node_modules/
 .next/
 next-env.d.ts
 *.tsbuildinfo
+public/stipple/stipple.js
+public/stipple/*.glsl
+.env*
