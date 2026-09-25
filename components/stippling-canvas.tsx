@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
+import { NativeCameraStatus, useNativeCamera } from "./native-camera"
 import * as THREE from "three"
 import { GPUComputationRenderer } from "three-stdlib"
 import { FloatingPanel, Slider, Toggle, SegmentedControl, SelectControl, Button, Folder } from "./floating-panel"
@@ -37,6 +38,13 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
   const [isWebcamActive, setIsWebcamActive] = useState(true)
   const [isPlaying, setIsPlaying] = useState(false)
   const [handLandmarker, setHandLandmarker] = useState<HandLandmarkerType | null>(null)
+
+  const nativeCamera = useNativeCamera(isPlaying && isWebcamActive)
+  const publishFrame = nativeCamera.publish
+
+  // A fixed 720p canvas gives meeting capture a stable aspect ratio and GPU cost.
+  const outputWidth = 1280
+  const outputHeight = 720
 
   // Device selection
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([])
@@ -107,7 +115,7 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
   const refreshDevices = useCallback(async () => {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices()
-      setVideoDevices(devices.filter((d) => d.kind === "videoinput" && d.deviceId))
+      setVideoDevices(devices.filter((d) => d.kind === "videoinput" && d.deviceId && !/stipple cam/i.test(d.label)))
       setAudioDevices(devices.filter((d) => d.kind === "audioinput" && d.deviceId))
     } catch (err) {
       console.error("Error enumerating devices:", err)
@@ -116,6 +124,8 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
 
   useEffect(() => {
     refreshDevices()
+    navigator.mediaDevices?.addEventListener("devicechange", refreshDevices)
+    return () => navigator.mediaDevices?.removeEventListener("devicechange", refreshDevices)
   }, [refreshDevices])
 
   // Initialize HandLandmarker when hands mode is selected
@@ -131,13 +141,13 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
         const { FilesetResolver, HandLandmarker } = visionModule
 
         const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm",
+          window.stippleCamera ? "/mediapipe/wasm" : "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm",
         )
         if (cancelled) return
 
         const landmarker = await HandLandmarker.createFromOptions(vision, {
           baseOptions: {
-            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+            modelAssetPath: window.stippleCamera ? "/mediapipe/hand_landmarker.task" : "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
             delegate: "GPU",
           },
           runningMode: "VIDEO",
@@ -169,6 +179,8 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
   useEffect(() => {
     if (controlMode !== "hands" || !isPlaying) return
 
+    let cancelled = false
+    let audioStream: MediaStream | null = null
     let audioContext: AudioContext | null = null
     let analyser: AnalyserNode | null = null
     let dataArray: Uint8Array<ArrayBuffer> | null = null
@@ -181,6 +193,8 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
           audio: selectedAudioDeviceId ? { deviceId: { exact: selectedAudioDeviceId } } : true,
         }
         const stream = await navigator.mediaDevices.getUserMedia(constraints)
+        if (cancelled) { stream.getTracks().forEach(track => track.stop()); return }
+        audioStream = stream
         audioContext = new AudioContext()
         const source = audioContext.createMediaStreamSource(stream)
         analyser = audioContext.createAnalyser()
@@ -233,81 +247,70 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
     initAudio()
 
     return () => {
+      cancelled = true
       cancelAnimationFrame(rafId)
+      audioStream?.getTracks().forEach(track => track.stop())
       audioContext?.close()
     }
   }, [controlMode, selectedAudioDeviceId, isPlaying])
 
-  // Webcam initialization
+  // Own each stream for the lifetime of this effect, including permission races.
   useEffect(() => {
     if (!isWebcamActive) return
-
     let cancelled = false
+    let stream: MediaStream | null = null
+    const video = videoRef.current
     const startWebcam = async () => {
+      setError(null)
       try {
-        if (videoRef.current?.srcObject) {
-          const existingStream = videoRef.current.srcObject as MediaStream
-          const activeTrack = existingStream.getVideoTracks()[0]
-          // Already streaming the camera being asked for - leave it alone rather than
-          // tearing down and re-acquiring (which flickers the feed)
-          if (activeTrack?.readyState === "live" && activeTrack.getSettings().deviceId === selectedVideoDeviceId) {
-            return
-          }
-          existingStream.getTracks().forEach((track) => track.stop())
-          videoRef.current.srcObject = null
-        }
-
-        // On first load there is no deviceId yet - permission has not been granted, so the
-        // ids are still hidden. A generic request is what raises the browser prompt; an
-        // exact deviceId is only usable once that prompt has been answered.
-        const constraints: MediaStreamConstraints = {
-          video: selectedVideoDeviceId ? { deviceId: { exact: selectedVideoDeviceId } } : true,
-        }
-        const stream = await navigator.mediaDevices.getUserMedia(constraints)
-        if (cancelled || !videoRef.current) {
-          stream.getTracks().forEach((track) => track.stop())
-          return
-        }
-
-        videoRef.current.srcObject = stream
-        videoRef.current.src = ""
-
-        await new Promise<void>((resolve) => {
-          if (!videoRef.current) return resolve()
-          videoRef.current.onloadedmetadata = () => resolve()
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera access requires HTTPS or localhost.")
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            ...(selectedVideoDeviceId ? { deviceId: { exact: selectedVideoDeviceId } } : {}),
+            width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 },
+          },
         })
-
-        if (cancelled || !videoRef.current) return
-
-        try {
-          await videoRef.current.play()
-          if (!cancelled) setIsPlaying(true)
-        } catch (playErr) {
-          if ((playErr as Error).name !== "AbortError") {
-            console.error("Error playing video:", playErr)
-          }
+        // A virtual camera can become the OS default. Never feed our own output back in.
+        if (/stipple cam/i.test(stream.getVideoTracks()[0]?.label || "")) {
+          stream.getTracks().forEach(track => track.stop())
+          const devices = await navigator.mediaDevices.enumerateDevices()
+          const input = devices.find(device => device.kind === "videoinput" && device.deviceId && !/stipple cam/i.test(device.label))
+          if (!input) throw new Error("No physical camera is available.")
+          stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
+            deviceId: { exact: input.deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 },
+          } })
         }
-
-        // Permission is granted now, so the real ids and labels are readable - refresh the
-        // picker and pin the selection to whichever camera the browser actually handed us
+        if (cancelled || !video) { stream.getTracks().forEach(track => track.stop()); return }
+        const ready = new Promise<void>(resolve => { video.onloadedmetadata = () => resolve() })
+        video.srcObject = stream
+        await ready
         if (cancelled) return
+        await video.play()
+        if (cancelled) return
+        setIsPlaying(true)
+        stream.getVideoTracks()[0]?.addEventListener("ended", () => {
+          if (!cancelled) {
+            setError("Camera disconnected. Reconnect it and start the camera again.")
+            setIsWebcamActive(false)
+            setIsPlaying(false)
+          }
+        })
         await refreshDevices()
-        const activeDeviceId = stream.getVideoTracks()[0]?.getSettings().deviceId
-        if (!cancelled && activeDeviceId && !selectedVideoDeviceId) {
-          setSelectedVideoDeviceId(activeDeviceId)
-        }
       } catch (err) {
         if (!cancelled) {
           console.error("Error accessing webcam:", err)
-          setError("Could not access webcam. Please ensure you have granted permission.")
+          setError("Could not access camera. Check camera permissions or choose another camera, then retry.")
           setIsWebcamActive(false)
+          setIsPlaying(false)
         }
       }
     }
     startWebcam()
-
     return () => {
       cancelled = true
+      stream?.getTracks().forEach(track => track.stop())
+      if (video) { video.onloadedmetadata = null; video.srcObject = null }
     }
   }, [selectedVideoDeviceId, isWebcamActive, refreshDevices])
 
@@ -336,7 +339,7 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
     const init = () => {
       // Renderer - use pixel ratio of 1 to avoid doubled particles on retina displays
       renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false })
-      renderer.setSize(container.clientWidth, container.clientHeight)
+      renderer.setSize(outputWidth, outputHeight, false)
       renderer.setPixelRatio(1)
       renderer.setClearColor(0x000000, 1)
 
@@ -528,7 +531,7 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
       velocityVariable.material.uniforms.uActive = { value: isSimulationActive ? 1.0 : 0.0 }
       // resolution is auto-injected by GPUComputationRenderer - don't override it
       velocityVariable.material.uniforms.videoAspect = { value: 16 / 9 }
-      velocityVariable.material.uniforms.screenAspect = { value: container.clientWidth / container.clientHeight }
+      velocityVariable.material.uniforms.screenAspect = { value: outputWidth / outputHeight }
 
       // resolution is auto-injected by GPUComputationRenderer - don't override it
 
@@ -564,7 +567,7 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
           videoTexture: { value: videoTexture },
           uRadius: { value: radius },
           videoAspect: { value: 16 / 9 },
-          screenAspect: { value: container.clientWidth / container.clientHeight },
+          screenAspect: { value: outputWidth / outputHeight },
         },
         vertexShader: `
           uniform sampler2D texturePosition;
@@ -629,7 +632,7 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
       // Update video aspect
       if (video.videoWidth && video.videoHeight) {
         const videoAspect = video.videoWidth / video.videoHeight
-        const screenAspect = container.clientWidth / container.clientHeight
+        const screenAspect = outputWidth / outputHeight
         velocityVariable.material.uniforms.videoAspect.value = videoAspect
         velocityVariable.material.uniforms.screenAspect.value = screenAspect
         ;(particleMesh.material as THREE.ShaderMaterial).uniforms.videoAspect.value = videoAspect
@@ -650,17 +653,18 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
         gpuCompute.getCurrentRenderTarget(positionVariable).texture
 
       renderer.render(scene, camera)
+      publishFrame.current(canvas)
     }
 
     // Handle resize
     const handleResize = () => {
       if (!renderer || !container) return
-      renderer.setSize(container.clientWidth, container.clientHeight)
+      renderer.setSize(outputWidth, outputHeight, false)
 
       // Update hand overlay size
       if (handOverlayRef.current) {
-        handOverlayRef.current.width = container.clientWidth
-        handOverlayRef.current.height = container.clientHeight
+        handOverlayRef.current.width = outputWidth
+        handOverlayRef.current.height = outputHeight
       }
     }
 
@@ -683,9 +687,10 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
         ;(particleMesh.material as THREE.ShaderMaterial).dispose()
       }
       videoTexture?.dispose()
+      renderer?.clear()
       renderer?.dispose()
     }
-  }, [isPlaying, particleCountBase])
+  }, [isPlaying, particleCountBase, publishFrame])
 
   // Hand tracking loop
   useEffect(() => {
@@ -875,10 +880,10 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
       <video ref={videoRef} className="hidden" playsInline muted crossOrigin="anonymous" />
 
       {/* WebGL canvas */}
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-contain" />
 
       {/* Hand tracking overlay */}
-      <canvas ref={handOverlayRef} className="absolute inset-0 w-full h-full pointer-events-none" />
+      <canvas ref={handOverlayRef} className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
 
       {/* Error display */}
       {error && (
@@ -889,6 +894,12 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
 
       {/* DialKit-style floating panel */}
       <FloatingPanel title="Controls" position="top-right" onCopy={handleCopy}>
+        <Button label={isWebcamActive ? "Stop camera" : "Start camera"} onClick={() => {
+          setIsPlaying(false)
+          setIsWebcamActive(!isWebcamActive)
+          setError(null)
+        }} />
+        <NativeCameraStatus status={nativeCamera.status} frameError={nativeCamera.frameError} active={isPlaying && isWebcamActive} />
         {/* Mode selector */}
         <SegmentedControl
           value={controlMode}
@@ -900,15 +911,15 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
         />
 
         {/* Camera selector */}
-        {videoDevices.length > 1 && (
+        {videoDevices.length > 0 && (
           <SelectControl
             label="Camera"
             value={selectedVideoDeviceId}
-            options={videoDevices.map((d) => ({
+            options={[{ value: "", label: "System default" }, ...videoDevices.map((d) => ({
               value: d.deviceId,
               label: d.label || `Camera ${d.deviceId.slice(0, 8)}`,
-            }))}
-            onChange={setSelectedVideoDeviceId}
+            }))]}
+            onChange={(id) => { if (id !== selectedVideoDeviceId) { setIsPlaying(false); setSelectedVideoDeviceId(id) } }}
           />
         )}
 

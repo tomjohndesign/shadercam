@@ -1,0 +1,7 @@
+{
+  "name": "stipple-cam-desktop",
+  "productName": "Stipple Cam",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.cjs"
+}

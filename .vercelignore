@@ -4,3 +4,7 @@
 node_modules/
 next-env.d.ts
 *.tsbuildinfo
+out/
+dist/
+desktop/
+scripts/
