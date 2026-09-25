@@ -36,10 +36,10 @@ const stage = '.context/mac-package'
 const native = '.context/native-build'
 await mkdir(native, { recursive: true })
 const compiler = ['clang++', '-std=c++17', '-fobjc-arc', '-O2', '-mmacosx-version-min=13.0', '-framework', 'Foundation', '-framework', 'CoreMediaIO', '-framework', 'CoreMedia', '-framework', 'CoreVideo']
-run('xcrun', [...compiler, 'desktop/native/CameraExtension.mm', '-o', `${native}/StippleCameraExtension`])
-run(`${native}/StippleCameraExtension`, ['--self-test'])
-run('xcrun', [...compiler, '-DNAPI_VERSION=8', '-I', require('node-api-headers').include_dir, '-bundle', '-undefined', 'dynamic_lookup', '-framework', 'SystemExtensions', 'desktop/native/CameraBridge.mm', '-o', `${native}/stipple-camera.node`])
-run(process.execPath, [require.resolve('next/dist/bin/next'), 'build'], { env: { ...process.env, STIPPLE_DESKTOP: '1' } })
+run('xcrun', [...compiler, 'desktop/native/CameraExtension.mm', '-o', `${native}/ShaderCamCameraExtension`])
+run(`${native}/ShaderCamCameraExtension`, ['--self-test'])
+run('xcrun', [...compiler, '-DNAPI_VERSION=8', '-I', require('node-api-headers').include_dir, '-bundle', '-undefined', 'dynamic_lookup', '-framework', 'SystemExtensions', 'desktop/native/CameraBridge.mm', '-o', `${native}/shadercam-camera.node`])
+run(process.execPath, [require.resolve('next/dist/bin/next'), 'build'], { env: { ...process.env, SHADERCAM_DESKTOP: '1' } })
 await rm(stage, { recursive: true, force: true })
 await mkdir(stage, { recursive: true })
 for (const file of ['main.cjs', 'preload.cjs', 'package.json']) await cp(`desktop/${file}`, `${stage}/${file}`)
@@ -53,27 +53,27 @@ try { await access(modelPath) } catch {
 }
 await cp(modelPath, `${stage}/web/mediapipe/hand_landmarker.task`)
 const result = await packager({
-  dir: stage, out: 'dist', name: 'Stipple Cam', platform: 'darwin', arch: process.arch,
+  dir: stage, out: 'dist', name: 'ShaderCam', platform: 'darwin', arch: process.arch,
   electronVersion: require('electron/package.json').version,
   appBundleId: appID, appCategoryType: 'public.app-category.video', appVersion: version, buildVersion: buildNumber,
   overwrite: true, asar: true,
   extendInfo: {
     LSMinimumSystemVersion: '13.0',
-    NSCameraUsageDescription: 'Stipple Cam uses your camera to create a live stippled video for calls.',
+    NSCameraUsageDescription: 'ShaderCam uses your camera to create a live stippled video for calls.',
     NSMicrophoneUsageDescription: 'Optional hand controls use your microphone to detect snaps and claps.',
-    NSSystemExtensionUsageDescription: 'Stipple Cam adds a camera you can select in calls and meetings.',
+    NSSystemExtensionUsageDescription: 'ShaderCam adds a camera you can select in calls and meetings.',
   },
 })
-const appPath = path.resolve(result[0], 'Stipple Cam.app')
+const appPath = path.resolve(result[0], 'ShaderCam.app')
 const extension = `${appPath}/Contents/Library/SystemExtensions/${extensionID}.systemextension`
 await mkdir(`${extension}/Contents/MacOS`, { recursive: true })
-await cp(`${native}/StippleCameraExtension`, `${extension}/Contents/MacOS/StippleCameraExtension`)
-await cp(`${native}/stipple-camera.node`, `${appPath}/Contents/Resources/stipple-camera.node`)
+await cp(`${native}/ShaderCamCameraExtension`, `${extension}/Contents/MacOS/ShaderCamCameraExtension`)
+await cp(`${native}/shadercam-camera.node`, `${appPath}/Contents/Resources/shadercam-camera.node`)
 await cp(profile, `${appPath}/Contents/embedded.provisionprofile`)
 await plist(`${extension}/Contents/Info.plist`, {
-  CFBundleIdentifier: extensionID, CFBundleExecutable: 'StippleCameraExtension', CFBundleName: 'Stipple Cam Camera',
+  CFBundleIdentifier: extensionID, CFBundleExecutable: 'ShaderCamCameraExtension', CFBundleName: 'ShaderCam Camera',
   CFBundlePackageType: 'SYSX', CFBundleInfoDictionaryVersion: '6.0', CFBundleShortVersionString: version, CFBundleVersion: buildNumber,
-  LSMinimumSystemVersion: '13.0', NSSystemExtensionUsageDescription: 'Makes Stipple Cam available as a camera in calls and meetings.',
+  LSMinimumSystemVersion: '13.0', NSSystemExtensionUsageDescription: 'Makes ShaderCam available as a camera in calls and meetings.',
   CMIOExtension: { CMIOExtensionMachServiceName: `${group}.camera` },
 })
 await plist(`${native}/extension.entitlements`, {
@@ -103,7 +103,7 @@ await sign({
 run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', appPath])
 console.log(`Signed app built: ${appPath}`)
 if (process.env.NOTARYTOOL_PROFILE) {
-  const zip = path.resolve('dist/Stipple-Cam-notarization.zip')
+  const zip = path.resolve('dist/ShaderCam-notarization.zip')
   await rm(zip, { force: true })
   run('ditto', ['-c', '-k', '--keepParent', appPath, zip])
   run('xcrun', ['notarytool', 'submit', zip, '--keychain-profile', process.env.NOTARYTOOL_PROFILE, '--wait'])
@@ -113,10 +113,10 @@ if (process.env.NOTARYTOOL_PROFILE) {
   const imageStage = '.context/dmg-stage'
   await rm(imageStage, { recursive: true, force: true })
   await mkdir(imageStage, { recursive: true })
-  await cp(appPath, `${imageStage}/Stipple Cam.app`, { recursive: true, verbatimSymlinks: true })
+  await cp(appPath, `${imageStage}/ShaderCam.app`, { recursive: true, verbatimSymlinks: true })
   run('ln', ['-s', '/Applications', `${imageStage}/Applications`])
-  const dmg = path.resolve(`dist/Stipple-Cam-${process.arch}.dmg`)
-  run('hdiutil', ['create', '-volname', 'Stipple Cam', '-srcfolder', imageStage, '-ov', '-format', 'UDZO', dmg])
+  const dmg = path.resolve(`dist/ShaderCam-${process.arch}.dmg`)
+  run('hdiutil', ['create', '-volname', 'ShaderCam', '-srcfolder', imageStage, '-ov', '-format', 'UDZO', dmg])
   run('codesign', ['--timestamp', '--sign', identity, dmg])
   run('xcrun', ['notarytool', 'submit', dmg, '--keychain-profile', process.env.NOTARYTOOL_PROFILE, '--wait'])
   run('xcrun', ['stapler', 'staple', dmg])

@@ -2,8 +2,9 @@ import type { Metadata } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Electrostatic Stippling",
-  description: "Real-time video stippling with hand tracking controls",
+  title: "ShaderCam",
+  description: "Real-time camera shaders with hand tracking controls",
+  metadataBase: new URL("https://shadercam.app"),
 }
 
 export default function RootLayout({

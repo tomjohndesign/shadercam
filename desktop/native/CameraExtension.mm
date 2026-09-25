@@ -30,7 +30,7 @@
     (id)kCVPixelBufferIOSurfacePropertiesKey: @{},
   };
   if (CVPixelBufferPoolCreate(kCFAllocatorDefault, nullptr, (__bridge CFDictionaryRef)attrs, &_pool) != kCVReturnSuccess) return nil;
-  _stream = [[CMIOExtensionStream alloc] initWithLocalizedName:@"Stipple Cam Video"
+  _stream = [[CMIOExtensionStream alloc] initWithLocalizedName:@"ShaderCam Video"
     streamID:[[NSUUID alloc] initWithUUIDString:@"DC31D25B-EAF6-438E-AC76-367551D62570"]
     direction:CMIOExtensionStreamDirectionSource clockType:CMIOExtensionStreamClockTypeHostTime source:self];
   return self;
@@ -125,7 +125,7 @@
   self = [super init];
   if (self) {
     _output = output;
-    _stream = [[CMIOExtensionStream alloc] initWithLocalizedName:@"Stipple Cam Input"
+    _stream = [[CMIOExtensionStream alloc] initWithLocalizedName:@"ShaderCam Input"
       streamID:[[NSUUID alloc] initWithUUIDString:@"C74C30B0-5F03-40E4-90EC-514B62CF4299"]
       direction:CMIOExtensionStreamDirectionSink clockType:CMIOExtensionStreamClockTypeHostTime source:self];
   }
@@ -206,7 +206,7 @@
   if (!self) return nil;
   _source = [StippleStream new];
   if (!_source) return nil;
-  _device = [[CMIOExtensionDevice alloc] initWithLocalizedName:@"Stipple Cam"
+  _device = [[CMIOExtensionDevice alloc] initWithLocalizedName:@"ShaderCam"
     deviceID:[[NSUUID alloc] initWithUUIDString:@"2EC8E394-118B-40EB-9E92-B5FE638326E9"]
     legacyDeviceID:@"com.tomjohn.stipplecam.camera" source:self];
   NSError *error = nil;
@@ -218,7 +218,7 @@
 - (NSSet<CMIOExtensionProperty> *)availableProperties { return [NSSet setWithArray:@[CMIOExtensionPropertyDeviceModel, CMIOExtensionPropertyDeviceTransportType]]; }
 - (CMIOExtensionDeviceProperties *)devicePropertiesForProperties:(NSSet<CMIOExtensionProperty> *)properties error:(NSError **)error {
   CMIOExtensionDeviceProperties *p = [CMIOExtensionDeviceProperties devicePropertiesWithDictionary:@{}];
-  p.model = @"Stipple Cam"; p.transportType = @(kIOAudioDeviceTransportTypeVirtual);
+  p.model = @"ShaderCam"; p.transportType = @(kIOAudioDeviceTransportTypeVirtual);
   return p;
 }
 - (BOOL)setDeviceProperties:(CMIOExtensionDeviceProperties *)properties error:(NSError **)error { return YES; }
@@ -244,7 +244,7 @@
 - (NSSet<CMIOExtensionProperty> *)availableProperties { return [NSSet setWithArray:@[CMIOExtensionPropertyProviderName, CMIOExtensionPropertyProviderManufacturer]]; }
 - (CMIOExtensionProviderProperties *)providerPropertiesForProperties:(NSSet<CMIOExtensionProperty> *)properties error:(NSError **)error {
   CMIOExtensionProviderProperties *p = [CMIOExtensionProviderProperties providerPropertiesWithDictionary:@{}];
-  p.name = @"Stipple Cam"; p.manufacturer = @"Stipple Cam";
+  p.name = @"ShaderCam"; p.manufacturer = @"ShaderCam";
   return p;
 }
 - (BOOL)setProviderProperties:(CMIOExtensionProviderProperties *)properties error:(NSError **)error { return YES; }

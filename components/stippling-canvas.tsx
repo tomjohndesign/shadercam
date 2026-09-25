@@ -115,7 +115,7 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
   const refreshDevices = useCallback(async () => {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices()
-      setVideoDevices(devices.filter((d) => d.kind === "videoinput" && d.deviceId && !/stipple cam/i.test(d.label)))
+      setVideoDevices(devices.filter((d) => d.kind === "videoinput" && d.deviceId && !/shadercam|stipple cam/i.test(d.label)))
       setAudioDevices(devices.filter((d) => d.kind === "audioinput" && d.deviceId))
     } catch (err) {
       console.error("Error enumerating devices:", err)
@@ -141,13 +141,13 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
         const { FilesetResolver, HandLandmarker } = visionModule
 
         const vision = await FilesetResolver.forVisionTasks(
-          window.stippleCamera ? "/mediapipe/wasm" : "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm",
+          window.shaderCam ? "/mediapipe/wasm" : "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm",
         )
         if (cancelled) return
 
         const landmarker = await HandLandmarker.createFromOptions(vision, {
           baseOptions: {
-            modelAssetPath: window.stippleCamera ? "/mediapipe/hand_landmarker.task" : "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+            modelAssetPath: window.shaderCam ? "/mediapipe/hand_landmarker.task" : "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
             delegate: "GPU",
           },
           runningMode: "VIDEO",
@@ -272,10 +272,10 @@ export default function StipplingCanvas({ density = 1 }: StipplingCanvasProps) {
           },
         })
         // A virtual camera can become the OS default. Never feed our own output back in.
-        if (/stipple cam/i.test(stream.getVideoTracks()[0]?.label || "")) {
+        if (/shadercam|stipple cam/i.test(stream.getVideoTracks()[0]?.label || "")) {
           stream.getTracks().forEach(track => track.stop())
           const devices = await navigator.mediaDevices.enumerateDevices()
-          const input = devices.find(device => device.kind === "videoinput" && device.deviceId && !/stipple cam/i.test(device.label))
+          const input = devices.find(device => device.kind === "videoinput" && device.deviceId && !/shadercam|stipple cam/i.test(device.label))
           if (!input) throw new Error("No physical camera is available.")
           stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
             deviceId: { exact: input.deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 },

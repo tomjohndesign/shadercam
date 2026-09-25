@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron')
-contextBridge.exposeInMainWorld('stippleCamera', {
+contextBridge.exposeInMainWorld('shaderCam', {
   status: () => ipcRenderer.invoke('camera:status'),
   activate: () => ipcRenderer.invoke('camera:activate'),
   sendFrame: pixels => ipcRenderer.invoke('camera:frame', pixels),

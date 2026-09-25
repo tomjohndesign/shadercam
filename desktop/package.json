@@ -1,6 +1,6 @@
 {
-  "name": "stipple-cam-desktop",
-  "productName": "Stipple Cam",
+  "name": "shadercam-desktop",
+  "productName": "ShaderCam",
   "version": "0.1.0",
   "private": true,
   "main": "main.cjs"

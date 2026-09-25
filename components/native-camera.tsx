@@ -10,7 +10,7 @@ type CameraAPI = {
   stop: () => Promise<void>
   openSettings: () => Promise<void>
 }
-declare global { interface Window { stippleCamera?: CameraAPI } }
+declare global { interface Window { shaderCam?: CameraAPI } }
 
 export function useNativeCamera(active: boolean) {
   const [status, setStatus] = useState<CameraStatus | null>(null)
@@ -18,7 +18,7 @@ export function useNativeCamera(active: boolean) {
   const publish = useRef<(canvas: HTMLCanvasElement) => void>(() => {})
 
   useEffect(() => {
-    const api = window.stippleCamera
+    const api = window.shaderCam
     if (!api) return
     let cancelled = false
     let polling = false
@@ -26,7 +26,7 @@ export function useNativeCamera(active: boolean) {
       if (polling) return
       polling = true
       try { const next = await api.status(); if (!cancelled) setStatus(next) }
-      catch { if (!cancelled) setFrameError("Could not communicate with the camera component. Reopen Stipple Cam.") }
+      catch { if (!cancelled) setFrameError("Could not communicate with the camera component. Reopen ShaderCam.") }
       finally { polling = false }
     }
     void refresh()
@@ -35,7 +35,7 @@ export function useNativeCamera(active: boolean) {
   }, [])
 
   useEffect(() => {
-    const api = window.stippleCamera
+    const api = window.shaderCam
     if (!api) return
     if (!active || status?.state !== "ready") {
       publish.current = () => {}
@@ -81,15 +81,15 @@ export function NativeCameraStatus({ status, frameError, active }: { status: Cam
   const [actionError, setActionError] = useState<string | null>(null)
   async function retry() {
     setActionError(null)
-    try { await window.stippleCamera?.activate() } catch { setActionError("Could not enable the camera. Reopen Stipple Cam to retry.") }
+    try { await window.shaderCam?.activate() } catch { setActionError("Could not enable the camera. Reopen ShaderCam to retry.") }
   }
   return <div className="space-y-2 rounded-lg bg-white/5 p-3 text-[12px] leading-relaxed text-white/65" aria-live="polite">
-    <div className="font-medium text-white/90">Stipple Cam for meetings</div>
-    {!status ? <p>The Mac app adds Stipple Cam directly to your meeting app’s camera menu. This browser is a preview of the effect.</p> : <>
-      <p>{status.state === "ready" ? active ? status.connected ? "Camera output is running. Select Stipple Cam in your call." : status.transportError || "Connecting video output…" : "Camera stopped. Calls receive a black image." : status.message}</p>
-      <p>Keep Stipple Cam open during your call. Use your usual microphone in the meeting app.</p>
+    <div className="font-medium text-white/90">ShaderCam for meetings</div>
+    {!status ? <p>The Mac app adds ShaderCam directly to your meeting app’s camera menu. This browser is a preview of the effect.</p> : <>
+      <p>{status.state === "ready" ? active ? status.connected ? "Camera output is running. Select ShaderCam in your call." : status.transportError || "Connecting video output…" : "Camera stopped. Calls receive a black image." : status.message}</p>
+      <p>Keep ShaderCam open during your call. Use your usual microphone in the meeting app.</p>
       {status.state === "approval" && <button type="button" className="w-full rounded bg-white/10 px-3 py-2 text-white hover:bg-white/15"
-        onClick={() => { void window.stippleCamera?.openSettings().catch(() => setActionError("Open System Settings → General → Login Items & Extensions → Camera Extensions.")) }}>Open System Settings</button>}
+        onClick={() => { void window.shaderCam?.openSettings().catch(() => setActionError("Open System Settings → General → Login Items & Extensions → Camera Extensions.")) }}>Open System Settings</button>}
       {status.state === "error" && <button type="button" className="w-full rounded bg-white/10 px-3 py-2 text-white hover:bg-white/15" onClick={retry}>Retry camera installation</button>}
     </>}
     {(frameError || actionError) && <p role="alert" className="text-amber-200">{frameError || actionError}</p>}

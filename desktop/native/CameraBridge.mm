@@ -6,7 +6,7 @@
 #include "CameraShared.hpp"
 
 static NSString *state = @"idle";
-static NSString *detail = @"Preparing Stipple Cam.";
+static NSString *detail = @"Preparing ShaderCam.";
 static uint64_t framesSent = 0;
 static CMIODeviceID deviceID = 0;
 static CMIOStreamID streamID = 0;
@@ -23,11 +23,11 @@ static NSString *transportError = nil;
 - (OSSystemExtensionReplacementAction)request:(OSSystemExtensionRequest *)request actionForReplacingExtension:(OSSystemExtensionProperties *)existing withExtension:(OSSystemExtensionProperties *)replacement { return OSSystemExtensionReplacementActionReplace; }
 - (void)requestNeedsUserApproval:(OSSystemExtensionRequest *)request {
   state = @"approval";
-  detail = @"Allow Stipple Cam in System Settings → General → Login Items & Extensions → Camera Extensions.";
+  detail = @"Allow ShaderCam in System Settings → General → Login Items & Extensions → Camera Extensions.";
 }
 - (void)request:(OSSystemExtensionRequest *)request didFinishWithResult:(OSSystemExtensionRequestResult)result {
   state = result == OSSystemExtensionRequestCompleted ? @"ready" : @"restart";
-  detail = result == OSSystemExtensionRequestCompleted ? @"Select Stipple Cam in your meeting app’s camera settings." : @"Restart your Mac to finish enabling Stipple Cam.";
+  detail = result == OSSystemExtensionRequestCompleted ? @"Select ShaderCam in your meeting app’s camera settings." : @"Restart your Mac to finish enabling ShaderCam.";
 }
 - (void)request:(OSSystemExtensionRequest *)request didFailWithError:(NSError *)error {
   state = @"error";
@@ -103,10 +103,10 @@ static napi_value status(napi_env env, napi_callback_info info) {
 static napi_value activate(napi_env env, napi_callback_info info) {
   if ([state isEqualToString:@"installing"] || [state isEqualToString:@"approval"]) return status(env, info);
   if (![NSBundle.mainBundle.bundlePath hasPrefix:@"/Applications/"]) {
-    state = @"location"; detail = @"Move Stipple Cam to Applications, then reopen it to enable the camera.";
+    state = @"location"; detail = @"Move ShaderCam to Applications, then reopen it to enable the camera.";
     return status(env, info);
   }
-  state = @"installing"; detail = @"Enabling the Stipple Cam camera extension…";
+  state = @"installing"; detail = @"Enabling the ShaderCam camera extension…";
   if (!delegate) delegate = [ActivationDelegate new];
   OSSystemExtensionRequest *request = [OSSystemExtensionRequest activationRequestForExtension:@"com.tomjohn.stipplecam.camera-extension" queue:dispatch_get_main_queue()];
   request.delegate = delegate;
@@ -160,4 +160,4 @@ static napi_value init(napi_env env, napi_value exports) {
   napi_add_env_cleanup_hook(env, [](void *) { stopTransport(); }, nullptr);
   return exports;
 }
-NAPI_MODULE(stipple_camera, init)
+NAPI_MODULE(shadercam_camera, init)

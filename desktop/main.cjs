@@ -16,7 +16,7 @@ const trusted = (url) => {
 const webPreferences = { nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false, preload: path.join(__dirname, 'preload.cjs') }
 
 function createWindow() {
-  const window = new BrowserWindow({ title: 'Stipple Cam', width: 1280, height: 800, backgroundColor: '#000000', webPreferences })
+  const window = new BrowserWindow({ title: 'ShaderCam', width: 1280, height: 800, backgroundColor: '#000000', webPreferences })
   window.loadURL(origin)
 }
 
@@ -27,7 +27,7 @@ app.on('web-contents-created', (_, contents) => {
 
 if (!app.requestSingleInstanceLock()) app.quit()
 else app.whenReady().then(async () => {
-  try { camera = require(path.join(process.resourcesPath, 'stipple-camera.node')) }
+  try { camera = require(path.join(process.resourcesPath, 'shadercam-camera.node')) }
   catch (error) { cameraError = `The camera component could not load: ${error.message}` }
   const status = () => camera ? camera.status() : { state: 'error', message: cameraError, connected: false, framesSent: 0 }
   const authorized = event => trusted(event.senderFrame?.url) && event.senderFrame === event.sender.mainFrame
@@ -76,7 +76,7 @@ else app.whenReady().then(async () => {
   createWindow()
   camera?.activate()
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
-}).catch(error => { dialog.showErrorBox('Stipple Cam could not start', error.message); app.quit() })
+}).catch(error => { dialog.showErrorBox('ShaderCam could not start', error.message); app.quit() })
 
 app.on('window-all-closed', () => app.quit())
 app.on('before-quit', () => { camera?.stop(); server?.close() })
