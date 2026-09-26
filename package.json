@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build",
+    "dev": "node scripts/build-stipple.mjs && next dev --turbopack",
+    "build": "node scripts/build-stipple.mjs && next build",
     "start": "next start",
     "lint": "next lint",
-    "mac:build": "node scripts/build-mac.mjs"
+    "mac:build": "node scripts/build-mac.mjs",
+    "build:stipple": "node scripts/build-stipple.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.18",
@@ -29,6 +30,7 @@
     "@types/react-dom": "^19",
     "@types/three": "^0.170.0",
     "electron": "^44.4.3",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.0.10",
     "node-api-headers": "^1.9.0",

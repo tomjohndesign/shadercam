@@ -7,4 +7,4 @@ next-env.d.ts
 out/
 dist/
 desktop/
-scripts/
+scripts/build-mac.mjs

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stipple — use it anywhere</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #101110; color: #eeeee8; }
+    * { box-sizing: border-box; } body { margin: 0; }
+    a { color: inherit; } button, .button { font: inherit; cursor: pointer; color: inherit; background: #262824; border: 1px solid #41443c; border-radius: 7px; padding: 10px 15px; text-decoration: none; display: inline-block; }
+    button:hover, .button:hover { background: #393d32; } button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid #d4ef8a; outline-offset: 4px; }
+    header, main, footer { max-width: 1240px; margin: auto; padding: 28px 32px; }
+    header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30322c; font-size: 13px; }
+    .brand { text-transform: uppercase; letter-spacing: .2em; font-weight: 700; }
+    .tag { color: #c3d99b; font: 12px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .08em; }
+    h1 { font-size: clamp(36px, 6vw, 68px); line-height: 1.05; font-weight: 500; letter-spacing: -.055em; margin: 18px 0; }
+    h2 { font-size: 23px; font-weight: 500; letter-spacing: -.025em; margin: 0 0 14px; }
+    p { color: #a7aaa0; line-height: 1.65; max-width: 650px; } .intro { padding: 24px 0 32px; }
+    .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 1px; background: #30322c; border: 1px solid #30322c; border-radius: 12px; overflow: hidden; }
+    .preview { position: relative; background: #000; min-height: 420px; } #output { width: 100%; height: 100%; position: absolute; inset: 0; display: block; }
+    .caption { position: absolute; bottom: 17px; left: 18px; font: 11px ui-monospace, monospace; color: #d3d9c5; background: #151711cc; padding: 7px 10px; border-radius: 4px; pointer-events: none; }
+    .controls { padding: 23px; background: #181a17; } .control { display: block; margin: 20px 0; font-size: 13px; }
+    .control span { display: flex; justify-content: space-between; } output { color: #bcc99f; font-family: ui-monospace, monospace; }
+    input[type=range] { width: 100%; margin: 12px 0 0; accent-color: #d4ef8a; } .check { font-size: 13px; display: block; margin: 20px 0; } .check input { accent-color: #d4ef8a; margin-right: 8px; }
+    .controls button { width: 100%; } .upload { display: block; font-size: 13px; margin: 20px 0; } .upload input { display: block; width: 100%; margin-top: 10px; font-size: 11px; color: #a7aaa0; }
+    .install { display: grid; grid-template-columns: .8fr 1.2fr; gap: 48px; padding-top: 48px; } .actions { display: flex; gap: 9px; flex-wrap: wrap; margin: 23px 0; }
+    .primary { color: #18200e; background: #d4ef8a; border-color: #d4ef8a; } .primary:hover { background: #e3ff9e; }
+    .codebar { display: flex; justify-content: space-between; align-items: center; color: #a7aaa0; font-size: 12px; padding: 10px 14px; border-bottom: 1px solid #30322c; }
+    .codebox { border: 1px solid #30322c; border-radius: 10px; overflow: hidden; background: #151714; min-width: 0; }
+    pre { overflow: auto; margin: 0; padding: 20px; line-height: 1.7; font: 12px/1.7 ui-monospace, monospace; color: #d1ddbe; }
+    details { margin-top: 32px; border-top: 1px solid #30322c; padding-top: 22px; } summary { cursor: pointer; } details p { font-size: 14px; }
+    #status { color: #d4ef8a; font-size: 13px; } footer { color: #7e8475; font-size: 12px; margin-top: 25px; border-top: 1px solid #30322c; }
+    @media(max-width: 760px) { header, main, footer { padding: 22px; } .workspace, .install { grid-template-columns: 1fr; } .preview { min-height: 350px; } .install { gap: 22px; } }
+    @media(prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+  <header><a class="brand" href="/">Stipple</a><span class="tag">A shader for your site</span></header>
+  <main>
+    <section class="intro"><div class="tag">From light to particles</div><h1>The effect. Anywhere.</h1><p>Turn images, video, and canvas content into a living field of dots. One JavaScript module, the same GPU simulation, and no framework required.</p></section>
+    <section class="workspace" aria-label="Interactive shader preview">
+      <div class="preview"><canvas id="output" aria-label="Animated stipple preview"></canvas><span class="caption" id="caption">LIVE CANVAS → GPU → STIPPLE</span></div>
+      <div class="controls">
+        <div class="tag">Make it yours</div>
+        <label class="control"><span>Density <output id="density-value">1×</output></span><input id="density" type="range" min="0.25" max="16" step="0.25" value="1"></label>
+        <label class="control"><span>Dot size <output id="radius-value">1</output></span><input id="radius" type="range" min="1" max="10" step="0.1" value="1"></label>
+        <label class="control"><span>Attraction <output id="attraction-value">1.58</output></span><input id="attraction" type="range" min="0" max="2" step="0.01" value="1.58"></label>
+        <label class="control"><span>Threshold <output id="threshold-value">0.64</output></span><input id="threshold" type="range" min="0" max="1" step="0.01" value="0.64"></label>
+        <label class="check"><input id="inverted" type="checkbox">Invert attraction</label>
+        <button id="pause" type="button">Pause animation</button>
+        <label class="upload">Try your own image<input id="upload" type="file" accept="image/*"></label>
+        <button id="reset" type="button">Reset demo</button>
+        <p id="status" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+    <section class="install">
+      <div><div class="tag">Bring your own pixels</div><h2 style="margin-top:14px">Add it to your site.</h2><p>Download the module and place it in your site’s public folder. Paste this snippet into your page, then replace <code>/your-image.jpg</code> with your image. Your preview settings are included.</p>
+      <div class="actions"><a class="button primary" href="./stipple.js" download>Download module ↓</a><a class="button" href="./demo.html" download>Download demo</a></div>
+      <p style="font-size:13px">Works with plain HTML, React, Vue, and other frameworks. Serve through HTTP or HTTPS. Keep the demo and module together to run this page locally.</p>
+      <details><summary>Video, cameras & lifecycle</summary><p>Pass a loaded <code>&lt;video&gt;</code> instead of an image for video or webcam input. You control playback and camera permissions. Use <code>mirror: true</code> for a webcam.</p><p><code>effect.update({ radius: 2 })</code> changes settings. <code>effect.pause()</code> and <code>effect.resume()</code> control rendering. Call <code>effect.dispose()</code> when removing the effect; stop your own webcam tracks separately.</p><p>The module resizes with its canvas. Set the canvas width and height in CSS. Cross-origin media needs CORS permission from the media server and <code>crossOrigin = "anonymous"</code> before setting its URL.</p><p>Requires WebGL 2 and floating-point render targets. This processes media supplied to a canvas; it is not a CSS filter for arbitrary page elements.</p></details>
+      <details><summary>Use the raw GLSL</summary><p>The effect uses two simulation passes and a particle draw pass. Import the four shader strings from the module, or download the sources:</p><p><a href="./velocityShader.glsl" download>Velocity</a> · <a href="./positionShader.glsl" download>Position</a> · <a href="./particleVertexShader.glsl" download>Particle vertex</a> · <a href="./particleFragmentShader.glsl" download>Particle fragment</a></p><p>The simulation shaders expect the texture uniforms and resolution definition supplied by Three.js GPUComputationRenderer.</p></details></div>
+      <div class="codebox"><div class="codebar"><span>HTML + JavaScript</span><button id="copy" type="button">Copy snippet</button></div><pre><code id="snippet"></code></pre></div>
+    </section>
+  </main>
+  <footer>GPU-powered electrostatic stippling · White particles, black canvas, endless inputs.</footer>
+  <script type="module">
+    import { createStippleEffect, defaultOptions } from './stipple.js';
+    const $ = id => document.getElementById(id);
+    const source = document.createElement('canvas');
+    source.width = 960; source.height = 640;
+    const ctx = source.getContext('2d');
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let effect, animation, paused = reducedMotion, uploaded = false, imageURL, uploadVersion = 0;
+    let settings = { ...defaultOptions };
+    function draw(time = 0) {
+      ctx.fillStyle = '#ededdf'; ctx.fillRect(0, 0, 960, 640);
+      const x = 480 + Math.sin(time / 2400) * 130;
+      const y = 300 + Math.cos(time / 3100) * 65;
+      const gradient = ctx.createRadialGradient(x - 65, y - 60, 5, x, y, 240);
+      gradient.addColorStop(0, '#d8d8ca'); gradient.addColorStop(.4, '#72766e'); gradient.addColorStop(.8, '#151a15'); gradient.addColorStop(1, '#ededdf');
+      ctx.fillStyle = gradient; ctx.fillRect(0, 0, 960, 640);
+      ctx.fillStyle = '#141913'; ctx.font = 'bold 120px system-ui'; ctx.textAlign = 'center'; ctx.fillText('STIPPLE', 480, 575);
+    }
+    function tick(time) { if (!paused && !uploaded) draw(time); animation = requestAnimationFrame(tick); }
+    function mount(input) {
+      effect?.dispose();
+      try {
+        effect = createStippleEffect({ canvas: $('output'), source: input, ...settings });
+        if (paused) requestAnimationFrame(() => effect?.pause());
+        $('status').textContent = '';
+      } catch (error) { $('status').textContent = error.message; }
+    }
+    function updateSnippet() {
+      const options = Object.entries(settings).filter(([key, value]) => value !== defaultOptions[key]).map(([key, value]) => `    ${key}: ${JSON.stringify(value)},`).join('\n');
+      $('snippet').textContent = `<canvas id="stipple" style="width:100%;height:500px;display:block"></canvas>
+
+<script type="module">
+  import { createStippleEffect } from '/stipple.js';
+
+  const image = new Image();
+  image.crossOrigin = 'anonymous';
+  image.src = '/your-image.jpg';
+  await image.decode();
+
+  const effect = createStippleEffect({
+    canvas: document.querySelector('#stipple'),
+    source: image,${options ? '\n' + options : ''}
+  });
+
+  // Adjust at any time:
+  // effect.update({ radius: 2 });
+  // effect.pause(); effect.resume();
+  // On page/component teardown:
+  // effect.dispose();
+<\/script>`;
+    }
+    for (const key of ['density', 'radius', 'attraction', 'threshold']) {
+      $(key).addEventListener('input', () => {
+        settings[key] = Number($(key).value);
+        $(key + '-value').textContent = settings[key] + (key === 'density' ? '×' : '');
+        try { effect?.update({ [key]: settings[key] }); } catch (error) { $('status').textContent = error.message; }
+        updateSnippet();
+      });
+    }
+    $('inverted').addEventListener('change', () => { settings.inverted = $('inverted').checked; effect?.update({ inverted: settings.inverted }); updateSnippet(); });
+    function updatePause() { $('pause').textContent = paused ? 'Resume animation' : 'Pause animation'; }
+    $('pause').addEventListener('click', () => { paused = !paused; paused ? effect?.pause() : effect?.resume(); updatePause(); });
+    $('upload').addEventListener('change', async () => {
+      const file = $('upload').files[0]; if (!file) return;
+      const version = ++uploadVersion;
+      const url = URL.createObjectURL(file);
+      try {
+        const image = new Image(); image.src = url; await image.decode();
+        if (version !== uploadVersion) { URL.revokeObjectURL(url); return; }
+        uploaded = true; mount(image);
+        if (imageURL) URL.revokeObjectURL(imageURL); imageURL = url;
+        $('caption').textContent = 'YOUR IMAGE → GPU → STIPPLE';
+      } catch { URL.revokeObjectURL(url); $('status').textContent = 'Could not load this image. Try a PNG, JPEG, or WebP.'; }
+    });
+    $('reset').addEventListener('click', () => {
+      ++uploadVersion; settings = { ...defaultOptions }; uploaded = false; paused = reducedMotion;
+      for (const key of ['density', 'radius', 'attraction', 'threshold']) { $(key).value = settings[key]; $(key + '-value').textContent = settings[key] + (key === 'density' ? '×' : ''); }
+      $('inverted').checked = false; $('upload').value = ''; draw(); mount(source);
+      if (imageURL) { URL.revokeObjectURL(imageURL); imageURL = undefined; }
+      $('caption').textContent = 'LIVE CANVAS → GPU → STIPPLE'; updatePause(); updateSnippet();
+    });
+    $('copy').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText($('snippet').textContent); $('copy').textContent = 'Copied!'; setTimeout(() => $('copy').textContent = 'Copy snippet', 1800); }
+      catch { $('status').textContent = 'Clipboard unavailable. Select and copy the snippet manually.'; }
+    });
+    window.addEventListener('pagehide', () => { cancelAnimationFrame(animation); effect?.dispose(); if (imageURL) URL.revokeObjectURL(imageURL); });
+    window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
+    draw(); mount(source); updatePause(); updateSnippet(); animation = requestAnimationFrame(tick);
+  </script>
+</body>
+</html>
