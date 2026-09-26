@@ -39,10 +39,16 @@ function normalize(options: StippleOptions): StippleOptions {
   return next
 }
 
-/** GPU particle stippling. The caller owns the source media and the canvas CSS size. */
-export function createStippleEffect({ canvas, source, ...initialOptions }: {
+/**
+ * GPU particle stippling. The caller owns the source media and the canvas CSS size.
+ * `resolution` fixes the drawing buffer size instead of following the canvas's CSS size.
+ * `onFrame` runs right after each render, while the WebGL drawing buffer is still readable.
+ */
+export function createStippleEffect({ canvas, source, resolution, onFrame, ...initialOptions }: {
   canvas: HTMLCanvasElement
   source: StippleSource
+  resolution?: { width: number; height: number }
+  onFrame?: (canvas: HTMLCanvasElement) => void
 } & Partial<StippleOptions>) {
   let options = normalize({ ...defaultOptions, ...initialOptions })
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false })
@@ -129,8 +135,8 @@ export function createStippleEffect({ canvas, source, ...initialOptions }: {
   }
 
   function resize() {
-    width = Math.max(1, canvas.clientWidth)
-    height = Math.max(1, canvas.clientHeight)
+    width = Math.max(1, resolution?.width ?? canvas.clientWidth)
+    height = Math.max(1, resolution?.height ?? canvas.clientHeight)
     renderer.setSize(width, height, false)
   }
 
@@ -165,6 +171,7 @@ export function createStippleEffect({ canvas, source, ...initialOptions }: {
     }
     points.material.uniforms.texturePosition.value = compute.getCurrentRenderTarget(position).texture
     renderer.render(scene, camera)
+    onFrame?.(canvas)
   }
 
   function pause() {

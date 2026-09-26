@@ -645,7 +645,7 @@ export function FloatingPanel({ title, position = "top-right", children, onCopy 
             padding: isCollapsed ? "12px" : "10px 12px 12px 12px",
             boxShadow: "var(--dial-shadow)",
             maxHeight: "calc(100vh - 80px)",
-            minWidth: isCollapsed ? "auto" : "280px",
+            width: isCollapsed ? "auto" : "min(300px, calc(100vw - 32px))",
             scrollbarWidth: "none",
             msOverflowStyle: "none",
           }}
@@ -682,6 +682,7 @@ export function FloatingPanel({ title, position = "top-right", children, onCopy 
             <div className="flex items-center gap-1">
               {!isCollapsed && onCopy && (
                 <button
+                  aria-label="Copy settings"
                   onClick={handleCopy}
                   className="flex items-center justify-center w-5 h-5 p-0 bg-transparent border-none cursor-pointer"
                 >
@@ -693,6 +694,7 @@ export function FloatingPanel({ title, position = "top-right", children, onCopy 
                 </button>
               )}
               <button
+                aria-label={isCollapsed ? "Expand controls" : "Collapse controls"}
                 onClick={() => setIsCollapsed(!isCollapsed)}
                 className="flex items-center justify-center w-5 h-5 p-0 bg-transparent border-none cursor-pointer"
               >
@@ -709,19 +711,10 @@ export function FloatingPanel({ title, position = "top-right", children, onCopy 
             </div>
           </div>
 
-          {/* Content */}
-          <AnimatePresence>
-            {!isCollapsed && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex flex-col gap-[6px]"
-              >
-                {children}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Keep the output controller mounted while the panel is collapsed. */}
+          <div className="flex flex-col gap-[6px]" style={{ display: isCollapsed ? "none" : undefined }}>
+            {children}
+          </div>
         </motion.div>
       </PanelContext.Provider>
     </motion.div>
